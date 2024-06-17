@@ -25,7 +25,7 @@ inline static void cudaCheckFunc(cudaError_t error, const char* file, int line, 
 
 // ---------- DEBUGGING UTILS ----------
 
-void print_matrix(const float* matrix, const int num_rows, const int num_cols)
+void print_matrix(const float* matrix, size_t num_rows, size_t num_cols)
 {
     for (int i = 0; i < num_rows; ++i) {
         for (int j = 0; j < num_cols; ++j) {
@@ -38,7 +38,7 @@ void print_matrix(const float* matrix, const int num_rows, const int num_cols)
 // ---------- UTILITIES ----------
 
 // Unused for now
-static float* slice(const float* arr, const int start_idx, const int end_idx)
+static float* slice(const float* arr, size_t start_idx, size_t end_idx)
 {
     if (start_idx < 0 || end_idx <= start_idx)
     {
@@ -77,7 +77,7 @@ extern "C" bool check_is_cuda_available()
 
 // ---------- CPU IMPLEMENTATIONS ----------
 
-extern "C" void launch_add_cpu(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_add_cpu(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     #pragma omp parallel for
     for (int i = 0; i < num_rows * num_cols; i++)
@@ -86,7 +86,7 @@ extern "C" void launch_add_cpu(const float* A, const float* B, float* result, co
     }
 }
 
-extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     #pragma omp parallel for collapse(2) num_threads(4)
     for (int i = 0; i < m_A; i++)
@@ -103,7 +103,7 @@ extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result,
     }
 }
 
-extern "C" void launch_transpose_cpu(const float* A, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_transpose_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     for (int i = 0; i < num_rows; i++)
     {
@@ -116,7 +116,7 @@ extern "C" void launch_transpose_cpu(const float* A, float* result, const int nu
 
 // ---------- KERNELS ----------
 
-__global__ void add_kernel(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+__global__ void add_kernel(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -128,7 +128,7 @@ __global__ void add_kernel(const float* A, const float* B, float* result, const 
     }
 }
 
-__global__ void matmul_kernel(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+__global__ void matmul_kernel(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -144,7 +144,7 @@ __global__ void matmul_kernel(const float* A, const float* B, float* result, con
     }
 }
 
-__global__ void transpose_kernel(const float* A, float* result, const int num_rows, const int num_cols)
+__global__ void transpose_kernel(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     int i = blockIdx.y * blockDim.y + threadIdx.y;
     int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -157,7 +157,7 @@ __global__ void transpose_kernel(const float* A, float* result, const int num_ro
 
 // ---------- LAUNCH FUNCTIONS ----------
 
-extern "C" void launch_add(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_add(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
@@ -199,7 +199,7 @@ extern "C" void launch_add(const float* A, const float* B, float* result, const 
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_matmul(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+extern "C" void launch_matmul(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     size_t size_A = (m_A * n_A) * sizeof(float);
     size_t size_B = (m_B * n_B) * sizeof(float);
@@ -241,7 +241,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, con
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_transpose(const float* A, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_transpose(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
