@@ -6,18 +6,17 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <iostream>
+#include <stdio.h>
 #include <omp.h>
 
 // ---------- ERROR HANDLING MACRO ----------
 
-#define cudaCheck(err) {cudaCheckFunc((err), __FILE__, __LINE__);}
-inline static void cudaCheckFunc(cudaError_t error, const char* file, int line, bool abort=true)
+#define cudaCheck(err) {__cudaCheck((err), __FILE__, __LINE__);}
+inline static void __cudaCheck(cudaError_t error, const char* file, int line, bool abort=true)
 {
     if (error != cudaSuccess)
     {
-        std::cerr << "[CUDA ERROR!] at file " << file << ":" << line << std::endl
-                  << cudaGetErrorString(error) << std::endl;
+        fprintf(stderr, "[CUDA ERROR!] at file %s:%d\n%s\n", file, line, cudaGetErrorString(error));
         if (abort)
             exit(error);
     }
@@ -25,20 +24,20 @@ inline static void cudaCheckFunc(cudaError_t error, const char* file, int line, 
 
 // ---------- DEBUGGING UTILS ----------
 
-void print_matrix(const float* matrix, const int num_rows, const int num_cols)
+void print_matrix(const float* matrix, size_t num_rows, size_t num_cols)
 {
     for (int i = 0; i < num_rows; ++i) {
         for (int j = 0; j < num_cols; ++j) {
-            std::cout << matrix[i * num_cols + j] << " ";
+            printf("%d ", matrix[i * num_cols + j]);
         }
-        std::cout << std::endl;
+        printf("\n");
     }
 }
 
 // ---------- UTILITIES ----------
 
 // Unused for now
-static float* slice(const float* arr, const int start_idx, const int end_idx)
+static float* slice(const float* arr, size_t start_idx, size_t end_idx)
 {
     if (start_idx < 0 || end_idx <= start_idx)
     {
@@ -69,7 +68,7 @@ extern "C" bool check_is_cuda_available()
     cudaError_t error_id = cudaGetDeviceCount(&device_count);
     if (error_id != cudaSuccess)
     {
-        std::cerr << "cudaGetDeviceCount returned " << static_cast<int>(error_id) << " -> "  << cudaGetErrorString(error_id) << std::endl;
+        fprintf(stderr, "cudaGetDeviceCount returned %d -> %s\n", static_cast<int>(error_id), cudaGetErrorString(error_id));
         return false;
     }
     return true;
@@ -77,7 +76,7 @@ extern "C" bool check_is_cuda_available()
 
 // ---------- CPU IMPLEMENTATIONS ----------
 
-extern "C" void launch_add_cpu(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_add_cpu(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     #pragma omp parallel for
     for (int i = 0; i < num_rows * num_cols; i++)
@@ -86,7 +85,7 @@ extern "C" void launch_add_cpu(const float* A, const float* B, float* result, co
     }
 }
 
-extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     #pragma omp parallel for collapse(2) num_threads(4)
     for (int i = 0; i < m_A; i++)
@@ -94,7 +93,7 @@ extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result,
         for (int j = 0; j < n_B; j++)
         {
             float sum = 0.0f;
-            for (int k = 0; k < n_B; k++)
+            for (int k = 0; k < n_A; k++)
             {
                 sum += A[i * n_A + k] * B[k * n_B + j];
             }
@@ -103,7 +102,7 @@ extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result,
     }
 }
 
-extern "C" void launch_transpose_cpu(const float* A, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_transpose_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     for (int i = 0; i < num_rows; i++)
     {
@@ -116,7 +115,7 @@ extern "C" void launch_transpose_cpu(const float* A, float* result, const int nu
 
 // ---------- KERNELS ----------
 
-__global__ void add_kernel(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+__global__ void add_kernel(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -128,12 +127,12 @@ __global__ void add_kernel(const float* A, const float* B, float* result, const 
     }
 }
 
-__global__ void matmul_kernel(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+__global__ void matmul_kernel(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row < m_A && col < m_B)
+    if (row < m_A && col < n_B)
     {
         float sum = 0.0f;
         for (int k = 0; k < n_A; k++)
@@ -144,7 +143,7 @@ __global__ void matmul_kernel(const float* A, const float* B, float* result, con
     }
 }
 
-__global__ void transpose_kernel(const float* A, float* result, const int num_rows, const int num_cols)
+__global__ void transpose_kernel(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     int i = blockIdx.y * blockDim.y + threadIdx.y;
     int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -157,7 +156,7 @@ __global__ void transpose_kernel(const float* A, float* result, const int num_ro
 
 // ---------- LAUNCH FUNCTIONS ----------
 
-extern "C" void launch_add(const float* A, const float* B, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_add(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
@@ -199,8 +198,14 @@ extern "C" void launch_add(const float* A, const float* B, float* result, const 
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_matmul(const float* A, const float* B, float* result, const int m_A, const int n_A, const int m_B, const int n_B)
+extern "C" void launch_matmul(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
+    if (n_A != m_B)
+    {
+        fprintf(stderr, "Matricies of shape (%d, %d) and (%d, %d) cannot by multiplied together.\n", m_A, n_A, m_B, n_B);
+        exit(EXIT_FAILURE);
+    }
+
     size_t size_A = (m_A * n_A) * sizeof(float);
     size_t size_B = (m_B * n_B) * sizeof(float);
     size_t size_result = (m_A * n_B) * sizeof(float);
@@ -228,7 +233,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, con
                    (m_A + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
     matmul_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_B, d_result, m_A, n_A, m_B, n_B);
-    
+
     cudaCheck(cudaGetLastError());
     cudaCheck(cudaDeviceSynchronize());
 
@@ -241,7 +246,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, con
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_transpose(const float* A, float* result, const int num_rows, const int num_cols)
+extern "C" void launch_transpose(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 

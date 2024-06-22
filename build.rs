@@ -6,7 +6,7 @@ use std::process::Command;
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let out_dir = PathBuf::from(&manifest_dir).join("libs");
-    let cuda_file = "src/kernels/dense.cu";
+    let cuda_file = "src/common/cuda/dense.cu";
 
     fs::create_dir_all(&out_dir).expect("Failed to create directory");
 
