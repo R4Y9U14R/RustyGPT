@@ -1,1 +1,1 @@
-# Rusty-LLM
+# RustyGPT
