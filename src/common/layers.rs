@@ -8,13 +8,6 @@ pub struct FullyConnected {
     bias: Option<Vec<f32>>,
 }
 
-pub struct FullyConnectedBuilder {
-    input_size: usize,
-    output_size: usize,
-    weights: Option<Vec<f32>>,
-    bias: Option<Vec<f32>>,
-}
-
 impl FullyConnected {
     pub fn new(input_size: usize, output_size: usize) -> Self {
         Self {
@@ -35,16 +28,12 @@ impl FullyConnected {
         self
     }
 
-    pub fn build(self) -> FullyConnected {
-        FullyConnected {
-            input_size: self.input_size,
-            output_size: self.output_size,
-            weights: self.weights,
-            bias: self.bias,
-        }
-    }
-
     pub fn forward(self, x: &Vec<f32>) -> Vec<f32> {
-        add(&matmul(&self.weights.unwrap(), &transpose(x, x.len(), 1), self.output_size, self.input_size, x.len(), 1), &self.bias.unwrap(), self.output_size, 1)
+        add(
+            &matmul(&self.weights.unwrap(), &transpose(x, x.len(), 1), self.output_size, self.input_size, x.len(), 1),
+            &self.bias.unwrap(),
+            self.output_size,
+            1
+        )
     }
 }
