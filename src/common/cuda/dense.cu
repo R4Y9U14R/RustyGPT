@@ -8,6 +8,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <omp.h>
+#include <cmath>
 
 // ---------- ERROR HANDLING MACRO ----------
 
@@ -32,32 +33,6 @@ void print_matrix(const float* matrix, size_t num_rows, size_t num_cols)
         }
         printf("\n");
     }
-}
-
-// ---------- UTILITIES ----------
-
-// Unused for now
-static float* slice(const float* arr, size_t start_idx, size_t end_idx)
-{
-    if (start_idx < 0 || end_idx <= start_idx)
-    {
-        return nullptr;
-    }
-
-    int length = end_idx - start_idx;
-    float* result_arr = (float*)malloc(length * sizeof(float));
-
-    if (result_arr == nullptr)
-    {
-        return nullptr;
-    }
-
-    for (int i = start_idx; i < end_idx; ++i)
-    {
-        result_arr[i - start_idx] = arr[i];
-    }
-
-    return result_arr;
 }
 
 // ---------- CUDA UTILS ----------
@@ -104,12 +79,40 @@ extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result,
 
 extern "C" void launch_transpose_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
+    #pragma omp for
     for (int i = 0; i < num_rows; i++)
     {
         for (int j = 0; j < num_cols; j++)
         {
             result[i * num_cols + j] = A[j * num_rows + i];
         }
+    }
+}
+
+extern "C" void launch_relu_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
+{
+    #pragma omp for
+    for (size_t i =  0; i < num_cols; i++)
+    {
+        for (size_t j = 0; j < num_cols; j++)
+        {
+            int idx = i * num_cols + j;
+            result[idx] = A[idx] > 0 ? A[idx] : 0.0f;
+        }
+    }
+}
+
+extern "C" void launch_softmax_cpu(const float* logits, float* result, int n_classes)
+{
+    float denominator = 0.0f;
+    for (int j = 0; j < n_classes; j++)
+    {
+        denominator += std::exp(logits[j]);
+    }
+    for (int j = 0; j < n_classes; j++)
+    {
+        float numerator = std::exp(logits[j]);
+        result[j] = numerator / denominator;
     }
 }
 
@@ -151,6 +154,30 @@ __global__ void transpose_kernel(const float* A, float* result, size_t num_rows,
     if (i < num_rows && j < num_cols)
     {
         result[i * num_cols + j] = A[j * num_rows + i];
+    }
+}
+
+__global__ void relu_kernel(const float* A, float* result, size_t num_rows, size_t num_cols)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < num_rows * num_cols)
+    {
+        result[i] = result[i] = A[i] > 0 ? A[i] : 0;
+    }
+}
+
+__global__ void softmax_kernel(const float* logits, float* result, int n_classes)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n_classes)
+    {
+        float denominator = 0.0f;
+        for (int j = 0; j < n_classes; j++)
+        {
+            denominator += std::exp(logits[j]);
+        }
+        float numerator = std::exp(logits[i]);
+        result[i] = numerator / denominator;
     }
 }
 
@@ -202,7 +229,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, siz
 {
     if (n_A != m_B)
     {
-        fprintf(stderr, "Matricies of shape (%d, %d) and (%d, %d) cannot by multiplied together.\n", m_A, n_A, m_B, n_B);
+        fprintf(stderr, "Matricies of shape (%zu, %zu) and (%zu, %zu) cannot by multiplied together.\n", m_A, n_A, m_B, n_B);
         exit(EXIT_FAILURE);
     }
 
@@ -268,6 +295,73 @@ extern "C" void launch_transpose(const float* A, float* result, size_t num_rows,
                    (num_rows + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
     transpose_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_result, num_rows, num_cols);
+    
+    cudaCheck(cudaGetLastError());
+    cudaCheck(cudaDeviceSynchronize());
+
+    cudaCheck(cudaMemcpy(h_result, d_result, size, cudaMemcpyDeviceToHost));
+
+    memcpy(result, h_result, size);
+
+    cudaCheck(cudaFree(d_A));
+    cudaCheck(cudaFree(d_result));
+}
+
+extern "C" void launch_relu(const float* logits, float* result, size_t num_rows, size_t num_cols)
+{
+    size_t size = (num_rows * num_cols) * sizeof(float);
+
+    float* h_A = (float*)malloc(size);
+    float* h_result = (float*)malloc(size);
+
+    memcpy(h_A, logits, size);
+    memcpy(h_result, result, size);
+
+    float* d_A;
+    cudaCheck(cudaMalloc(&d_A, size));
+    float* d_result;
+    cudaCheck(cudaMalloc(&d_result, size));
+
+    cudaCheck(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice));
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((num_cols + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                   (num_rows + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    relu_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_result, num_rows, num_cols);
+    
+    cudaCheck(cudaGetLastError());
+    cudaCheck(cudaDeviceSynchronize());
+
+    cudaCheck(cudaMemcpy(h_result, d_result, size, cudaMemcpyDeviceToHost));
+
+    memcpy(result, h_result, size);
+
+    cudaCheck(cudaFree(d_A));
+    cudaCheck(cudaFree(d_result));
+}
+
+extern "C" void launch_softmax(const float* logits, float* result, int n_classes)
+{
+    size_t size = n_classes * sizeof(float);
+
+    float* h_A = (float*)malloc(size);
+    float* h_result = (float*)malloc(size);
+
+    memcpy(h_A, logits, size);
+    memcpy(h_result, result, size);
+
+    float* d_A;
+    cudaCheck(cudaMalloc(&d_A, size));
+    float* d_result;
+    cudaCheck(cudaMalloc(&d_result, size));
+
+    cudaCheck(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice));
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((n_classes + threadsPerBlock.x - 1) / threadsPerBlock.x);
+
+    softmax_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_result, n_classes);
     
     cudaCheck(cudaGetLastError());
     cudaCheck(cudaDeviceSynchronize());
