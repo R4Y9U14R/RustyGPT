@@ -218,8 +218,6 @@ extern "C" void launch_add(const float* A, const float* B, float* result, size_t
 
     memcpy(result, h_result, size);
 
-    print_matrix(h_result, num_rows, num_cols);
-
     cudaCheck(cudaFree(d_A));
     cudaCheck(cudaFree(d_B));
     cudaCheck(cudaFree(d_result));
@@ -229,7 +227,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, siz
 {
     if (n_A != m_B)
     {
-        fprintf(stderr, "Matricies of shape (%zu, %zu) and (%zu, %zu) cannot by multiplied together.\n", m_A, n_A, m_B, n_B);
+        fprintf(stderr, "Matricies of shape (%zu, %zu) and (%zu, %zu) cannot be multiplied together.\n", m_A, n_A, m_B, n_B);
         exit(EXIT_FAILURE);
     }
 
