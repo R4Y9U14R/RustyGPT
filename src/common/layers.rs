@@ -18,22 +18,27 @@ impl FullyConnected {
         }
     }
 
-    pub fn weights(mut self, weights: Vec<f32>) -> Self {
-        self.weights = Some(weights);
+    pub fn weights(mut self, weights: Option<Vec<f32>>) -> Self {
+        self.weights = weights;
         self
     }
 
-    pub fn bias(mut self, bias: Vec<f32>) -> Self {
-        self.bias = Some(bias);
+    pub fn bias(mut self, bias: Option<Vec<f32>>) -> Self {
+        self.bias = bias;
         self
     }
 
-    pub fn forward(self, x: &Vec<f32>) -> Vec<f32> {
-        add(
-            &matmul(&self.weights.unwrap(), &transpose(x, x.len(), 1), self.output_size, self.input_size, x.len(), 1),
-            &self.bias.unwrap(),
-            self.output_size,
-            1
-        )
+    pub fn forward(&self, x: &[f32]) -> Vec<f32> {
+        let weights = self.weights.as_ref().expect("Weights not set");
+        let bias = self.bias.as_ref().expect("Bias not set");
+
+        assert_eq!(x.len(), self.input_size, "Input size mismatched");
+
+        let matmul_result = matmul(&weights, &x, self.output_size, self.input_size, x.len(), 1);
+        assert_eq!(matmul_result.len(), self.output_size, "Matmul output size mismatch");
+
+        let result = add(&matmul_result, &bias, self.output_size, 1);
+
+        result
     }
 }
