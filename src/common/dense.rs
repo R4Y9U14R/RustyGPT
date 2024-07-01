@@ -113,3 +113,21 @@ pub fn softmax(logits: &[f32], n_classes: i32) -> Vec<f32> {
     }
     result
 }
+
+pub fn argmax(arr: &[f32]) -> Option<usize> {
+    if arr.is_empty() {
+        return None;
+    }
+
+    let mut max_idx = 0;
+    let mut max_val = arr[0];
+
+    for (idx, &val) in arr.iter().enumerate().skip(1) {
+        if val > max_val {
+            max_idx = idx;
+            max_val = val;
+        }
+    }
+
+    Some(max_idx)
+}
