@@ -10,6 +10,8 @@
 #include <omp.h>
 #include <cmath>
 
+#include <dense.cuh>
+
 // ---------- ERROR HANDLING MACRO ----------
 
 #define cudaCheck(err) {__cudaCheck((err), __FILE__, __LINE__);}
@@ -35,9 +37,14 @@ void print_matrix(const float* matrix, size_t num_rows, size_t num_cols)
     }
 }
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // ---------- CUDA UTILS ----------
 
-extern "C" bool check_is_cuda_available()
+API_EXPORT bool check_is_cuda_available()
 {
     int device_count = 0;
     cudaError_t error_id = cudaGetDeviceCount(&device_count);
@@ -51,7 +58,7 @@ extern "C" bool check_is_cuda_available()
 
 // ---------- CPU IMPLEMENTATIONS ----------
 
-extern "C" void launch_add_cpu(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_add_cpu(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     #pragma omp parallel for
     for (int i = 0; i < num_rows * num_cols; i++)
@@ -60,7 +67,7 @@ extern "C" void launch_add_cpu(const float* A, const float* B, float* result, si
     }
 }
 
-extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
+API_EXPORT void launch_matmul_cpu(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     #pragma omp parallel for collapse(2) num_threads(4)
     for (int i = 0; i < m_A; i++)
@@ -77,7 +84,7 @@ extern "C" void launch_matmul_cpu(const float* A, const float* B, float* result,
     }
 }
 
-extern "C" void launch_transpose_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_transpose_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     #pragma omp for
     for (int i = 0; i < num_rows; i++)
@@ -89,7 +96,7 @@ extern "C" void launch_transpose_cpu(const float* A, float* result, size_t num_r
     }
 }
 
-extern "C" void launch_relu_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_relu_cpu(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     #pragma omp for
     for (size_t i =  0; i < num_cols; i++)
@@ -102,7 +109,7 @@ extern "C" void launch_relu_cpu(const float* A, float* result, size_t num_rows, 
     }
 }
 
-extern "C" void launch_softmax_cpu(const float* logits, float* result, int n_classes)
+API_EXPORT void launch_softmax_cpu(const float* logits, float* result, int n_classes)
 {
     float denominator = 0.0f;
     for (int j = 0; j < n_classes; j++)
@@ -115,6 +122,10 @@ extern "C" void launch_softmax_cpu(const float* logits, float* result, int n_cla
         result[j] = numerator / denominator;
     }
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 // ---------- KERNELS ----------
 
@@ -181,9 +192,14 @@ __global__ void softmax_kernel(const float* logits, float* result, int n_classes
     }
 }
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // ---------- LAUNCH FUNCTIONS ----------
 
-extern "C" void launch_add(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_add(const float* A, const float* B, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
@@ -223,7 +239,7 @@ extern "C" void launch_add(const float* A, const float* B, float* result, size_t
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_matmul(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
+API_EXPORT void launch_matmul(const float* A, const float* B, float* result, size_t m_A, size_t n_A, size_t m_B, size_t n_B)
 {
     if (n_A != m_B)
     {
@@ -271,7 +287,7 @@ extern "C" void launch_matmul(const float* A, const float* B, float* result, siz
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_transpose(const float* A, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_transpose(const float* A, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
@@ -305,7 +321,7 @@ extern "C" void launch_transpose(const float* A, float* result, size_t num_rows,
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_relu(const float* logits, float* result, size_t num_rows, size_t num_cols)
+API_EXPORT void launch_relu(const float* logits, float* result, size_t num_rows, size_t num_cols)
 {
     size_t size = (num_rows * num_cols) * sizeof(float);
 
@@ -339,7 +355,7 @@ extern "C" void launch_relu(const float* logits, float* result, size_t num_rows,
     cudaCheck(cudaFree(d_result));
 }
 
-extern "C" void launch_softmax(const float* logits, float* result, int n_classes)
+API_EXPORT void launch_softmax(const float* logits, float* result, int n_classes)
 {
     size_t size = n_classes * sizeof(float);
 
@@ -371,3 +387,7 @@ extern "C" void launch_softmax(const float* logits, float* result, int n_classes
     cudaCheck(cudaFree(d_A));
     cudaCheck(cudaFree(d_result));
 }
+
+#ifdef __cplusplus
+}
+#endif

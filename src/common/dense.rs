@@ -2,6 +2,7 @@ extern crate libc;
 
 use libc::{c_float, c_int};
 
+#[link(name = "dense")]
 extern "C" {
     fn check_is_cuda_available() -> bool;
     fn launch_add_cpu(A: *const c_float, B: *const c_float, result: *mut c_float, num_rows: usize, num_cols: usize);
